@@ -34,9 +34,16 @@ git clone --depth 1 "$REPO_URL" "$TMP_DIR" 2>/dev/null || {
 echo ""
 echo "[3/4] Installing skill to $SKILL_DIR..."
 mkdir -p "$SKILL_DIR"
+# 清理旧目录（升级场景）
 rm -rf "$SKILL_DIR/scripts"
+rm -rf "$SKILL_DIR/templates"
+# 复制新文件
 cp -r "$TMP_DIR/scripts" "$SKILL_DIR/"
 cp "$TMP_DIR/SKILL.md" "$SKILL_DIR/"
+# 可选：复制示例文件
+if [ -d "$TMP_DIR/examples" ]; then
+    cp -r "$TMP_DIR/examples" "$SKILL_DIR/"
+fi
 
 # 清理临时文件
 rm -rf "$TMP_DIR"
