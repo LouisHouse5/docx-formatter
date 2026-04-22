@@ -1,0 +1,8 @@
+{
+  "TARGET": "file1.docx",
+  "TEMPLATE": "template.docx",
+  "FONT_SONG": "宋体",
+  "SIZE_COVER_TITLE": 304800,
+  "SIZE_BODY": 152400,
+  "FI_BODY": 304800
+}
