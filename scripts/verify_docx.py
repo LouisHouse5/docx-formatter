@@ -5,33 +5,17 @@
 """
 import docx
 import sys
+import argparse
 
-TARGET = sys.argv[1] if len(sys.argv) > 1 else 'target.docx'
-TEMPLATE = sys.argv[2] if len(sys.argv) > 2 else 'template.docx'
+from utils import get_para_props, check_file_exists
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
 
-def get_para_key_props(p):
-    text = p.text.strip()
-    if not text:
-        return None
-    runs = p.runs
-    first_run = runs[0] if runs else None
-
-    style_name = p.style.name if p.style else None
-
-    return {
-        'text': text[:70],
-        'style': style_name,
-        'alignment': p.alignment,
-        'line_spacing': str(p.paragraph_format.line_spacing)[:20] if p.paragraph_format.line_spacing else None,
-        'line_spacing_rule': str(p.paragraph_format.line_spacing_rule),
-        'space_before': p.paragraph_format.space_before,
-        'space_after': p.paragraph_format.space_after,
-        'first_line_indent': p.paragraph_format.first_line_indent,
-        'left_indent': p.paragraph_format.left_indent,
-        'font_name': first_run.font.name if first_run else None,
-        'font_size': first_run.font.size,
-        'bold': first_run.font.bold if first_run else None,
-    }
+parser = argparse.ArgumentParser(description='多维度验证目标文件与模板的格式一致性')
+parser.add_argument('target', nargs='?', default='target.docx', help='目标 docx 文件路径')
+parser.add_argument('template', nargs='?', default='template.docx', help='模板 docx 文件路径')
+args = parser.parse_args()
+TARGET = args.target
+TEMPLATE = args.template
 
 # ============== 段落验证 ==============
 def verify_paragraphs(tmpl_doc, target_doc):
@@ -41,13 +25,13 @@ def verify_paragraphs(tmpl_doc, target_doc):
 
     tmpl_map = {}
     for i, p in enumerate(tmpl_doc.paragraphs):
-        info = get_para_key_props(p)
+        info = get_para_props(p, max_text_len=70, with_outline=False)
         if info:
             tmpl_map[info['text']] = info
 
     diffs = []
     for i, p in enumerate(target_doc.paragraphs):
-        info = get_para_key_props(p)
+        info = get_para_props(p, max_text_len=70, with_outline=False)
         if not info:
             continue
 
@@ -281,7 +265,11 @@ def verify_tables(tmpl_doc, target_doc):
     return total
 
 # ============== 主程序 ==============
+@run_with_errors
 def main():
+    check_file_exists(TARGET, '目标文件')
+    check_file_exists(TEMPLATE, '模板文件')
+
     tmpl = docx.Document(TEMPLATE)
     doc = docx.Document(TARGET)
 
@@ -298,9 +286,9 @@ def main():
 
     print("\n" + "=" * 90)
     if total_diffs == 0:
-        print("全部验证通过！目标文件与模板格式完全一致。")
+        log_ok("全部验证通过！目标文件与模板格式完全一致。")
     else:
-        print(f"验证未通过！共发现 {total_diffs} 处差异，请修复后重新验证。")
+        log_warn(f"验证未通过！共发现 {total_diffs} 处差异，请修复后重新验证。")
     print("=" * 90)
 
 if __name__ == '__main__':

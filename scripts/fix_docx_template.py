@@ -16,6 +16,24 @@ from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn
 import re
 import copy
+import argparse
+import json
+
+from utils import (
+    set_run_font, format_para_runs,
+    get_odd_even_headers, set_odd_even_headers,
+    get_table_borders_xml, apply_table_borders, apply_default_table_borders,
+    has_toc_field, ns_tag, fix_quotes
+)
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
+
+parser = argparse.ArgumentParser(description='修复 docx 文件格式')
+parser.add_argument('target', nargs='?', help='目标 docx 文件路径（覆盖 CONFIG）')
+parser.add_argument('template', nargs='?', help='模板 docx 文件路径（覆盖 CONFIG）')
+parser.add_argument('--template-opt', '-t', dest='template_opt', help='模板 docx 文件路径（与位置参数等效，推荐批量处理时使用）')
+parser.add_argument('--batch-file', '-b', help='批量处理：从文本文件读取目标文件列表（每行一个路径）')
+parser.add_argument('--config', '-c', help='JSON 配置文件路径')
+args = parser.parse_args()
 
 # ========================== CONFIG 配置区（根据模板修改） ==========================
 TARGET = '目标文件.docx'  # <-- 修改为目标文件名
@@ -66,30 +84,6 @@ LEFT_MARGIN = Inches(1.02)
 RIGHT_MARGIN = Inches(1.02)
 
 # =================================================================================
-
-def set_run_font(run, name=FONT_SONG, size=SIZE_BODY, bold=False, italic=False, underline=False, color=None):
-    """设置 run 字体，包含东亚字体属性和完整格式"""
-    run.font.name = name
-    run.font.size = Emu(size)
-    if bold is None:
-        run.font.bold = None
-    else:
-        run.font.bold = bold
-    if italic is not None:
-        run.font.italic = italic
-    if underline is not None:
-        run.font.underline = underline
-    if color is not None:
-        run.font.color.rgb = color
-    r = run._element
-    rPr = r.get_or_add_rPr()
-    rFonts = rPr.get_or_add_rFonts()
-    rFonts.set(qn('w:eastAsia'), name)
-
-def format_para_runs(p, name=FONT_SONG, size=SIZE_BODY, bold=False):
-    """格式化段落中所有 run"""
-    for run in p.runs:
-        set_run_font(run, name, size, bold)
 
 def insert_paragraph_before(paragraph, text):
     """在指定段落之前插入新段落（XML 级别）"""
@@ -333,32 +327,6 @@ def classify_and_format(doc):
                 p.paragraph_format.first_line_indent = Emu(FI_BODY)
             format_para_runs(p, FONT_SONG, SIZE_BODY, False)
 
-def fix_quotes(doc):
-    """半角引号转全角引号（智能开闭匹配，包含单双引号）"""
-    def smart_quote_replace(text):
-        """智能判断开闭引号"""
-        result = []
-        for i, ch in enumerate(text):
-            if ch == '"':
-                # 段落开头、空格或中文标点前为开引号
-                if i == 0 or text[i-1] in ' \t\n\r（【《「『"\u201c\u2018：。，？！；、':
-                    result.append('\u201c')  # "
-                else:
-                    result.append('\u201d')  # "
-            elif ch == "'":
-                if i == 0 or text[i-1] in ' \t\n\r（【《「『\u201c\u2018：。，？！；、':
-                    result.append('\u2018')  # '
-                else:
-                    result.append('\u2019')  # '
-            else:
-                result.append(ch)
-        return ''.join(result)
-
-    for p in doc.paragraphs:
-        for run in p.runs:
-            if '"' in run.text or "'" in run.text:
-                run.text = smart_quote_replace(run.text)
-
 def fix_table_fonts(doc):
     """统一表格内字体"""
     for table in doc.tables:
@@ -368,32 +336,6 @@ def fix_table_fonts(doc):
                     for run in p.runs:
                         set_run_font(run, FONT_SONG, SIZE_BODY, run.font.bold or False)
 
-def _get_table_borders_xml(table):
-    """提取表格的边框 XML 元素（深拷贝）"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    tbl = table._tbl
-    tblPr = tbl.find(f'{{{ns}}}tblPr')
-    if tblPr is None:
-        return None
-    borders = tblPr.find(f'{{{ns}}}tblBorders')
-    if borders is None:
-        return None
-    return copy.deepcopy(borders)
-
-def _apply_table_borders(table, borders_element):
-    """将边框 XML 应用到表格"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    tbl = table._tbl
-    tblPr = tbl.find(f'{{{ns}}}tblPr')
-    if tblPr is None:
-        tblPr = docx.oxml.OxmlElement('w:tblPr')
-        tbl.insert(0, tblPr)
-
-    old_borders = tblPr.find(f'{{{ns}}}tblBorders')
-    if old_borders is not None:
-        tblPr.remove(old_borders)
-    tblPr.append(copy.deepcopy(borders_element))
-
 def copy_table_borders_from_template(tmpl_doc, target_doc):
     """从模板自动同步表格边框（按表格索引一对一）"""
     tmpl_tables = tmpl_doc.tables
@@ -402,9 +344,9 @@ def copy_table_borders_from_template(tmpl_doc, target_doc):
 
     copied = 0
     for i in range(min_tables):
-        borders = _get_table_borders_xml(tmpl_tables[i])
+        borders = get_table_borders_xml(tmpl_tables[i])
         if borders is not None:
-            _apply_table_borders(target_tables[i], borders)
+            apply_table_borders(target_tables[i], borders)
             copied += 1
 
     print(f"  已同步 {copied}/{len(target_tables)} 个表格边框")
@@ -414,68 +356,23 @@ def fix_table_borders(doc):
     【兼容旧版】统一表格边框样式（XML 级别操作）
     当未提供模板时，使用硬编码默认边框
     """
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-
     for table in doc.tables:
-        tbl = table._tbl
-        tblPr = tbl.find(f'{{{ns}}}tblPr')
-        if tblPr is None:
-            tblPr = docx.oxml.OxmlElement('w:tblPr')
-            tbl.insert(0, tblPr)
-
-        borders = tblPr.find(f'{{{ns}}}tblBorders')
-        if borders is None:
-            borders = docx.oxml.OxmlElement('w:tblBorders')
-            tblPr.append(borders)
-
-        # 清除旧边框设置
-        for child in list(borders):
-            borders.remove(child)
-
-        # 添加新边框（默认：所有边框单线，宽度 4 = 1/2 pt）
-        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-            border = docx.oxml.OxmlElement(f'w:{border_name}')
-            border.set(f'{{{ns}}}val', 'single')
-            border.set(f'{{{ns}}}sz', '4')
-            border.set(f'{{{ns}}}space', '0')
-            border.set(f'{{{ns}}}color', 'auto')
-            borders.append(border)
+        apply_default_table_borders(table)
 
 def fix_table_alignment(doc):
     """统一表格对齐方式"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     for table in doc.tables:
         tbl = table._tbl
-        tblPr = tbl.find(f'{{{ns}}}tblPr')
+        tblPr = tbl.find(ns_tag('w:tblPr'))
         if tblPr is None:
             tblPr = docx.oxml.OxmlElement('w:tblPr')
             tbl.insert(0, tblPr)
 
-        jc = tblPr.find(f'{{{ns}}}jc')
+        jc = tblPr.find(ns_tag('w:jc'))
         if jc is None:
             jc = docx.oxml.OxmlElement('w:jc')
             tblPr.append(jc)
-        jc.set(f'{{{ns}}}val', 'center')
-
-def _get_odd_even_headers(section):
-    """检查 section 是否启用奇偶页不同页眉页脚"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    sectPr = section._sectPr
-    return sectPr.find(f'{{{ns}}}evenAndOddHeaders') is not None
-
-
-def _set_odd_even_headers(section, enabled):
-    """设置 section 的奇偶页不同页眉页脚"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    sectPr = section._sectPr
-    existing = sectPr.find(f'{{{ns}}}evenAndOddHeaders')
-    if enabled:
-        if existing is None:
-            sectPr.append(docx.oxml.OxmlElement('w:evenAndOddHeaders'))
-    else:
-        if existing is not None:
-            sectPr.remove(existing)
-
+        jc.set(ns_tag('w:val'), 'center')
 
 def fix_section_settings(doc, tmpl_doc=None):
     """
@@ -502,7 +399,7 @@ def fix_section_settings(doc, tmpl_doc=None):
             s.footer_distance = ts.footer_distance
             s.different_first_page_header_footer = ts.different_first_page_header_footer
             # odd_and_even_pages_header_footer 不是 python-docx 属性，需操作 XML
-            _set_odd_even_headers(s, _get_odd_even_headers(ts))
+            set_odd_even_headers(s, get_odd_even_headers(ts))
 
         if len(target_sections) > len(tmpl_sections):
             # 目标 section 更多，剩余的使用最后一个模板的设置
@@ -519,7 +416,7 @@ def fix_section_settings(doc, tmpl_doc=None):
                 s.header_distance = last_tmpl.header_distance
                 s.footer_distance = last_tmpl.footer_distance
                 s.different_first_page_header_footer = last_tmpl.different_first_page_header_footer
-                _set_odd_even_headers(s, _get_odd_even_headers(last_tmpl))
+                set_odd_even_headers(s, get_odd_even_headers(last_tmpl))
         print(f"  已同步 {len(target_sections)} 个 section 的页面设置（来自模板）")
     else:
         for section in doc.sections:
@@ -548,16 +445,15 @@ def remove_empty_table_rows(doc):
 def remove_empty_paragraphs(doc):
     """删除文档中空段落（无文本且无特殊格式）"""
     removed = 0
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     for p in list(doc.paragraphs):
         if not p.text.strip():
             # 保留有表格、分节符或图片的段落
             has_content = any(child.tag.endswith(('tbl', 'sectPr')) for child in p._element)
             if not has_content:
                 # 检查 run 中是否有图片
-                for r in p._element.findall(f'{{{ns}}}r'):
+                for r in p._element.findall(ns_tag('w:r')):
                     for pic_tag in ('drawing', 'pict', 'object'):
-                        if r.find(f'{{{ns}}}{pic_tag}') is not None:
+                        if r.find(ns_tag(f'w:{pic_tag}')) is not None:
                             has_content = True
                             break
                     if has_content:
@@ -567,27 +463,6 @@ def remove_empty_paragraphs(doc):
                 removed += 1
     if removed > 0:
         print(f"  已删除 {removed} 个空段落")
-
-def _has_toc_field(doc):
-    """检测文档是否已包含 TOC 域"""
-    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-    for p in doc.paragraphs:
-        # 检查 fldSimple
-        fld_simple = p._element.find('.//w:fldSimple', ns)
-        if fld_simple is not None:
-            instr = fld_simple.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}instr')
-            if instr and 'TOC' in instr:
-                return True
-        # 检查 fldChar
-        fld_chars = p._element.findall('.//w:fldChar', ns)
-        for fld in fld_chars:
-            fld_type = fld.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldCharType')
-            if fld_type == 'begin':
-                instr_texts = p._element.findall('.//w:instrText', ns)
-                for it in instr_texts:
-                    if it.text and 'TOC' in it.text:
-                        return True
-    return False
 
 def _find_toc_paragraphs(tmpl_doc):
     """从模板中提取 TOC 域所在的段落 XML 元素列表"""
@@ -659,7 +534,7 @@ def fix_toc_from_template(tmpl_doc, target_doc):
     同步目录域：如果目标文件没有 TOC 域，从模板复制。
     如果目标文件已有 TOC，仅报告不覆盖（避免破坏现有目录）。
     """
-    if _has_toc_field(target_doc):
+    if has_toc_field(target_doc):
         print("  目标文件已包含 TOC 域，跳过")
         return
 
@@ -719,20 +594,21 @@ def fix_specific_issues(doc):
 
     pass  # 如无特定问题，保留空函数
 
-def main():
-    print(f"开始修复: {TARGET}")
-    print(f"参考模板: {TEMPLATE}")
+def _process_single_file(target_path, tmpl_path):
+    """处理单个目标文件的完整修复流程"""
+    print(f"开始修复: {target_path}")
+    print(f"参考模板: {tmpl_path}")
     print("-" * 60)
 
-    doc = docx.Document(TARGET)
+    doc = docx.Document(target_path)
 
     # 尝试加载模板（用于自动同步隐藏格式）
     tmpl_doc = None
     try:
-        tmpl_doc = docx.Document(TEMPLATE)
-        print("✓ 模板加载成功，将自动同步隐藏格式")
+        tmpl_doc = docx.Document(tmpl_path)
+        log_ok("模板加载成功，将自动同步隐藏格式")
     except Exception as e:
-        print(f"⚠ 模板加载失败 ({e})，将使用 CONFIG 默认值")
+        log_warn(f"模板加载失败 ({e})，将使用 CONFIG 默认值")
 
     print("1. 修复段落格式...")
     classify_and_format(doc)
@@ -770,11 +646,54 @@ def main():
     print("10. 删除表格空行...")
     remove_empty_table_rows(doc)
 
-    doc.save(TARGET)
+    check_write_permission(target_path, '目标文件')
+    doc.save(target_path)
     print("-" * 60)
-    print(f"修复完成！已保存: {TARGET}")
+    log_ok(f"修复完成！已保存: {target_path}")
     print("\n后续步骤:")
-    print(f"  python3 verify_docx.py {TARGET} {TEMPLATE}")
+    print(f"  python3 verify_docx.py {target_path} {tmpl_path}")
+
+
+@run_with_errors
+def main():
+    global TARGET, TEMPLATE
+
+    # 如果提供了配置文件，从 JSON 读取并覆盖全局 CONFIG
+    if args.config:
+        with open(args.config, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        for key, val in cfg.items():
+            if key in globals():
+                globals()[key] = val
+                log_ok(f"配置覆盖: {key} = {val}")
+
+    # 确定目标文件列表
+    targets = []
+    if args.batch_file:
+        with open(args.batch_file, 'r', encoding='utf-8') as f:
+            targets = [line.strip() for line in f if line.strip()]
+    elif args.target:
+        targets = [args.target]
+    else:
+        targets = [TARGET]  # fallback 到 CONFIG 默认值
+
+    # 确定模板路径（--template-opt 优先级高于位置参数）
+    tmpl = args.template_opt if args.template_opt else (args.template if args.template else TEMPLATE)
+
+    # 逐个处理目标文件
+    for target_path in targets:
+        print(f"\n{'='*60}")
+        print(f"处理: {target_path}")
+        print('='*60)
+        try:
+            _process_single_file(target_path, tmpl)
+        except Exception as e:
+            log_err(f"处理失败: {e}")
+            continue
+
+    print(f"\n{'='*60}")
+    print(f"批量处理完成。共处理 {len(targets)} 个文件。")
+    print('='*60)
 
 if __name__ == '__main__':
     main()

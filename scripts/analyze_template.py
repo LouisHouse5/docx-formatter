@@ -8,56 +8,23 @@ from docx.shared import Emu, Inches
 from docx.enum.section import WD_ORIENT
 import sys
 import re
+import argparse
 
-TEMPLATE = sys.argv[1] if len(sys.argv) > 1 else 'template.docx'
+from utils import emu_to_pt, emu_to_inch, get_para_props, ns_tag, ns_attr
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
 
-def emu_to_pt(emu):
-    return emu / 12700 if emu else None
-
-def emu_to_inch(emu):
-    return emu / 914400 if emu else None
+parser = argparse.ArgumentParser(description='深度分析模板文件格式规范')
+parser.add_argument('template', nargs='?', default='template.docx', help='模板 docx 文件路径')
+args = parser.parse_args()
+TEMPLATE = args.template
 
 # ============== 段落分析 ==============
-def get_para_props(p, idx):
-    text = p.text.strip()
-    if not text:
+def get_para_props_with_idx(p, idx):
+    info = get_para_props(p, max_text_len=70, with_outline=True)
+    if info is None:
         return None
-    runs = p.runs
-    first_run = runs[0] if runs else None
-
-    # 获取样式名称
-    style_name = p.style.name if p.style else None
-
-    # 获取大纲级别（如有）
-    outline_lvl = None
-    try:
-        pPr = p._element.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
-        if pPr is not None:
-            outline = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}outlineLvl')
-            if outline is not None:
-                outline_lvl = outline.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-    except:
-        pass
-
-    return {
-        'idx': idx,
-        'text': text[:70],
-        'style': style_name,
-        'outline_lvl': outline_lvl,
-        'alignment': p.alignment,
-        'line_spacing': str(p.paragraph_format.line_spacing)[:30],
-        'line_spacing_rule': str(p.paragraph_format.line_spacing_rule),
-        'space_before': p.paragraph_format.space_before,
-        'space_after': p.paragraph_format.space_after,
-        'first_line_indent': p.paragraph_format.first_line_indent,
-        'left_indent': p.paragraph_format.left_indent,
-        'right_indent': p.paragraph_format.right_indent,
-        'font_name': first_run.font.name if first_run else None,
-        'font_size': first_run.font.size,
-        'bold': first_run.font.bold if first_run else None,
-        'italic': first_run.font.italic if first_run else None,
-        'underline': first_run.font.underline if first_run else None,
-    }
+    info['idx'] = idx
+    return info
 
 def classify(text, idx):
     """根据内容分类段落类型"""
@@ -123,14 +90,14 @@ def analyze_sections(doc):
         print(f"  首页不同: {section.different_first_page_header_footer}")
         # 奇偶页不同需检查 sectPr 中的 evenAndOddHeaders 元素
         sectPr = section._sectPr
-        even_odd = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}evenAndOddHeaders')
+        even_odd = sectPr.find(ns_tag('w:evenAndOddHeaders'))
         print(f"  奇偶页不同: {even_odd is not None}")
 
         # 分节符类型
         sectPr = section._sectPr
-        sect_type = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
+        sect_type = sectPr.find(ns_tag('w:type'))
         if sect_type is not None:
-            print(f"  分节符类型: {sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', 'default')}")
+            print(f"  分节符类型: {sect_type.get(ns_attr('val'), 'default')}")
 
 # ============== 页眉页脚分析 ==============
 def analyze_headers_footers(doc):
@@ -167,7 +134,7 @@ def analyze_headers_footers(doc):
 
                     # 检测域代码
                     for run in p.runs:
-                        if run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldChar'):
+                        if run._element.findall(f'.//{ns_tag("w:fldChar")}'):
                             print(f"        -> 包含域代码")
         else:
             print("  页脚: 无")
@@ -212,40 +179,40 @@ def analyze_tables(doc):
 
         # 表格边框
         tbl = table._tbl
-        tblPr = tbl.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblPr')
+        tblPr = tbl.find(ns_tag('w:tblPr'))
         if tblPr is not None:
-            borders = tblPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblBorders')
+            borders = tblPr.find(ns_tag('w:tblBorders'))
             if borders is not None:
                 for border in borders:
                     tag = border.tag.split('}')[-1]
-                    val = border.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                    sz = border.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                    val = border.get(ns_tag('w:val'))
+                    sz = border.get(ns_tag('w:sz'))
                     print(f"  边框 {tag}: val={val}, sz={sz}")
             else:
                 print("  边框: 无显式设置（继承默认）")
 
         # 表格宽度
-        tblW = tblPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblW') if tblPr is not None else None
+        tblW = tblPr.find(ns_tag('w:tblW')) if tblPr is not None else None
         if tblW is not None:
-            w_type = tblW.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
-            w_val = tblW.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w')
+            w_type = tblW.get(ns_tag('w:type'))
+            w_val = tblW.get(ns_tag('w:w'))
             print(f"  表格宽度: type={w_type}, w={w_val}")
 
         # 对齐方式
-        jc = tblPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}jc') if tblPr is not None else None
+        jc = tblPr.find(ns_tag('w:jc')) if tblPr is not None else None
         if jc is not None:
-            print(f"  表格对齐: {jc.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')}")
+            print(f"  表格对齐: {jc.get(ns_tag('w:val'))}")
 
         # 列宽
         print("  列宽:")
         for row in table.rows:
             for j, cell in enumerate(row.cells):
-                tcPr = cell._tc.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tcPr')
+                tcPr = cell._tc.find(ns_tag('w:tcPr'))
                 if tcPr is not None:
-                    tcW = tcPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tcW')
+                    tcW = tcPr.find(ns_tag('w:tcW'))
                     if tcW is not None:
-                        w_type = tcW.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
-                        w_val = tcW.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w')
+                        w_type = tcW.get(ns_tag('w:type'))
+                        w_val = tcW.get(ns_tag('w:w'))
                         print(f"    col{j}: type={w_type}, w={w_val}")
             break  # 只输出第一行
 
@@ -262,27 +229,26 @@ def analyze_toc(doc):
     print("【目录域代码】")
     print("=" * 100)
 
-    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
     found_toc = False
 
     for i, p in enumerate(doc.paragraphs):
         # 查找 fldSimple 域
-        fld_simple = p._element.find('.//w:fldSimple', ns)
+        fld_simple = p._element.find(f'.//{ns_tag("w:fldSimple")}')
         if fld_simple is not None:
-            instr = fld_simple.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}instr')
+            instr = fld_simple.get(ns_attr('instr'))
             if instr and 'TOC' in instr:
                 found_toc = True
                 print(f"\n  [{i}] 发现 TOC 域 (fldSimple):")
                 print(f"    指令: {instr}")
 
         # 查找复杂域 (fldChar)
-        fld_chars = p._element.findall('.//w:fldChar', ns)
+        fld_chars = p._element.findall(f'.//{ns_tag("w:fldChar")}')
         if fld_chars:
             for fld in fld_chars:
-                fld_type = fld.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldCharType')
+                fld_type = fld.get(ns_attr('fldCharType'))
                 if fld_type == 'begin':
                     # 查找对应的 instrText
-                    instr_texts = p._element.findall('.//w:instrText', ns)
+                    instr_texts = p._element.findall(f'.//{ns_tag("w:instrText")}')
                     for it in instr_texts:
                         if it.text and 'TOC' in it.text:
                             found_toc = True
@@ -293,6 +259,7 @@ def analyze_toc(doc):
         print("  未发现 TOC 域（可能是手动目录或静态文本）")
 
 # ============== 主程序 ==============
+@run_with_errors
 def main():
     doc = docx.Document(TEMPLATE)
 
@@ -307,7 +274,7 @@ def main():
 
     results = {}
     for i, p in enumerate(doc.paragraphs):
-        info = get_para_props(p, i)
+        info = get_para_props_with_idx(p, i)
         if not info:
             continue
         category = classify(info['text'], i)

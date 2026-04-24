@@ -6,29 +6,16 @@
 import docx
 from copy import deepcopy
 import sys
+import argparse
+from utils import get_odd_even_headers, set_odd_even_headers, check_file_exists
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
 
-TMPL = sys.argv[1] if len(sys.argv) > 1 else 'template.docx'
-TARGET = sys.argv[2] if len(sys.argv) > 2 else 'target.docx'
-
-def _get_odd_even_headers(section):
-    """检查 section 是否启用奇偶页不同页眉页脚"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    sectPr = section._sectPr
-    return sectPr.find(f'{{{ns}}}evenAndOddHeaders') is not None
-
-
-def _set_odd_even_headers(section, enabled):
-    """设置 section 的奇偶页不同页眉页脚"""
-    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    sectPr = section._sectPr
-    existing = sectPr.find(f'{{{ns}}}evenAndOddHeaders')
-    if enabled:
-        if existing is None:
-            sectPr.append(docx.oxml.OxmlElement('w:evenAndOddHeaders'))
-    else:
-        if existing is not None:
-            sectPr.remove(existing)
-
+parser = argparse.ArgumentParser(description='将模板页眉页脚复制到目标文件')
+parser.add_argument('template', nargs='?', default='template.docx', help='模板 docx 文件路径')
+parser.add_argument('target', nargs='?', default='target.docx', help='目标 docx 文件路径')
+args = parser.parse_args()
+TMPL = args.template
+TARGET = args.target
 
 def copy_headers_footers(tmpl_doc, target_doc):
     """复制页眉页脚"""
@@ -78,18 +65,23 @@ def copy_headers_footers(tmpl_doc, target_doc):
 
         # 复制页面设置属性
         target_s.different_first_page_header_footer = tmpl_s.different_first_page_header_footer
-        _set_odd_even_headers(target_s, _get_odd_even_headers(tmpl_s))
+        set_odd_even_headers(target_s, get_odd_even_headers(tmpl_s))
 
     print("-" * 60)
     print("页眉页脚复制完成！")
 
+@run_with_errors
 def main():
+    check_file_exists(TMPL, '模板文件')
+    check_file_exists(TARGET, '目标文件')
+
     tmpl = docx.Document(TMPL)
     doc = docx.Document(TARGET)
 
     copy_headers_footers(tmpl, doc)
+    check_write_permission(TARGET, '目标文件')
     doc.save(TARGET)
-    print(f"已保存: {TARGET}")
+    log_ok(f"已保存: {TARGET}")
 
 if __name__ == '__main__':
     main()

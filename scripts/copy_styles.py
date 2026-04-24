@@ -7,9 +7,17 @@ import docx
 from docx.oxml.ns import qn
 from copy import deepcopy
 import sys
+import argparse
 
-TMPL = sys.argv[1] if len(sys.argv) > 1 else 'template.docx'
-TARGET = sys.argv[2] if len(sys.argv) > 2 else 'target.docx'
+from utils import check_file_exists
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
+
+parser = argparse.ArgumentParser(description='将模板样式复制到目标文件')
+parser.add_argument('template', nargs='?', default='template.docx', help='模板 docx 文件路径')
+parser.add_argument('target', nargs='?', default='target.docx', help='目标 docx 文件路径')
+args = parser.parse_args()
+TMPL = args.template
+TARGET = args.target
 
 def copy_styles(tmpl_doc, target_doc):
     """将模板中的关键样式复制到目标文件"""
@@ -57,13 +65,18 @@ def copy_styles(tmpl_doc, target_doc):
     print("-" * 60)
     print("样式复制完成！")
 
+@run_with_errors
 def main():
+    check_file_exists(TMPL, '模板文件')
+    check_file_exists(TARGET, '目标文件')
+
     tmpl = docx.Document(TMPL)
     doc = docx.Document(TARGET)
 
     copy_styles(tmpl, doc)
+    check_write_permission(TARGET, '目标文件')
     doc.save(TARGET)
-    print(f"已保存: {TARGET}")
+    log_ok(f"已保存: {TARGET}")
 
 if __name__ == '__main__':
     main()

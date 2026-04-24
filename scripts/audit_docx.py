@@ -5,31 +5,19 @@
 """
 import docx
 import sys
+import argparse
+from utils import get_para_props, check_file_exists
+from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
 
-TARGET = sys.argv[1] if len(sys.argv) > 1 else 'target.docx'
-TEMPLATE = sys.argv[2] if len(sys.argv) > 2 else 'template.docx'
+parser = argparse.ArgumentParser(description='全面对比目标文件与模板的差异')
+parser.add_argument('target', nargs='?', default='target.docx', help='目标 docx 文件路径')
+parser.add_argument('template', nargs='?', default='template.docx', help='模板 docx 文件路径')
+args = parser.parse_args()
+TARGET = args.target
+TEMPLATE = args.template
 
-def get_para_props(p):
-    text = p.text.strip()
-    if not text:
-        return None
-    runs = p.runs
-    first_run = runs[0] if runs else None
-    style_name = p.style.name if p.style else None
-    return {
-        'text': text[:60],
-        'style': style_name,
-        'alignment': p.alignment,
-        'line_spacing': p.paragraph_format.line_spacing,
-        'line_spacing_rule': str(p.paragraph_format.line_spacing_rule),
-        'space_before': p.paragraph_format.space_before,
-        'space_after': p.paragraph_format.space_after,
-        'first_line_indent': p.paragraph_format.first_line_indent,
-        'left_indent': p.paragraph_format.left_indent,
-        'font_name': first_run.font.name if first_run else None,
-        'font_size': first_run.font.size if first_run else None,
-        'bold': first_run.font.bold if first_run else None,
-    }
+check_file_exists(TARGET, '目标文件')
+check_file_exists(TEMPLATE, '模板文件')
 
 print("=" * 80)
 print(f"目标文件: {TARGET}")
@@ -246,7 +234,10 @@ print(f"  表格差异: {len(table_diffs)} 处")
 # ============== 汇总 ==============
 total = len(para_diffs) + len(section_diffs) + len(hf_diffs) + len(style_diffs) + len(table_diffs)
 print("\n" + "=" * 80)
-print(f"审核汇总: 共发现 {total} 处差异")
+if total == 0:
+    log_ok("审核汇总: 共发现 0 处差异，全部通过！")
+else:
+    log_warn(f"审核汇总: 共发现 {total} 处差异")
 print(f"  - 段落格式: {len(para_diffs)}")
 print(f"  - 分节设置: {len(section_diffs)}")
 print(f"  - 页眉页脚: {len(hf_diffs)}")
