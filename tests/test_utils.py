@@ -5,7 +5,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 import unittest
-from utils import emu_to_pt, emu_to_inch, pt_to_emu, inch_to_emu, ns_tag, ns_attr
+from utils import emu_to_pt, emu_to_inch, pt_to_emu, inch_to_emu, ns_tag, ns_attr, compare_para_props
 
 class TestEmuConversion(unittest.TestCase):
     def test_emu_to_pt(self):
@@ -69,6 +69,56 @@ class TestCheckFileExists(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             check_file_exists('/nonexistent/path/to/file.txt', '测试文件')
         self.assertEqual(cm.exception.code, 1)
+
+class TestCompareParaProps(unittest.TestCase):
+    def test_identical_props(self):
+        info = {
+            'font_name': '宋体', 'font_size': 152400, 'alignment': None,
+            'bold': False, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+            'style': 'Normal', 'first_line_indent': 304800,
+            'space_before': None, 'space_after': None,
+        }
+        self.assertEqual(compare_para_props(info, info), [])
+
+    def test_font_diff(self):
+        target = {'font_name': '微软雅黑', 'font_size': 152400, 'alignment': None,
+                  'bold': False, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+                  'style': 'Normal', 'first_line_indent': 304800,
+                  'space_before': None, 'space_after': None}
+        tmpl = {'font_name': '宋体', 'font_size': 152400, 'alignment': None,
+                'bold': False, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+                'style': 'Normal', 'first_line_indent': 304800,
+                'space_before': None, 'space_after': None}
+        issues = compare_para_props(target, tmpl)
+        self.assertEqual(len(issues), 1)
+        self.assertIn('font=', issues[0])
+        self.assertIn('宋体', issues[0])
+
+    def test_multiple_diffs(self):
+        target = {'font_name': '微软雅黑', 'font_size': 120000, 'alignment': 1,
+                  'bold': True, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+                  'style': 'Normal', 'first_line_indent': 304800,
+                  'space_before': None, 'space_after': None}
+        tmpl = {'font_name': '宋体', 'font_size': 152400, 'alignment': None,
+                'bold': False, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+                'style': 'Normal', 'first_line_indent': 304800,
+                'space_before': None, 'space_after': None}
+        issues = compare_para_props(target, tmpl)
+        self.assertEqual(len(issues), 4)
+
+    def test_none_tmpl_ignored(self):
+        target = {'font_name': '宋体', 'font_size': 152400, 'alignment': None,
+                  'bold': False, 'line_spacing': 1.5, 'line_spacing_rule': 'ONE_POINT_FIVE',
+                  'style': 'Normal', 'first_line_indent': 304800,
+                  'space_before': None, 'space_after': None}
+        tmpl = {'font_name': None, 'font_size': None, 'alignment': None,
+                'bold': None, 'line_spacing': None, 'line_spacing_rule': 'AT_LEAST',
+                'style': None, 'first_line_indent': None,
+                'space_before': None, 'space_after': None}
+        issues = compare_para_props(target, tmpl)
+        self.assertEqual(len(issues), 1)
+        self.assertIn('ls_rule', issues[0])
+
 
 if __name__ == '__main__':
     unittest.main()

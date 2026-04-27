@@ -62,9 +62,11 @@ python3 scripts/audit_docx.py 目标文件.docx 模板文件.docx
 ### 阶段 3：精确修复
 
 ```bash
-cp scripts/fix_docx_template.py fix_target.py
-# 编辑 fix_target.py 中的 CONFIG 和 fix_specific_issues()
-python3 fix_target.py
+# 单文件修复
+python3 scripts/fix_docx_template.py 目标文件.docx 模板文件.docx
+
+# 或指定模板路径（推荐）
+python3 scripts/fix_docx_template.py 目标文件.docx --template 模板文件.docx
 ```
 
 修复内容包括：
@@ -77,6 +79,22 @@ python3 fix_target.py
 7. **目录域自动同步**（从模板复制 TOC 域代码，目标已有则跳过）
 8. 半角引号转全角（含单双引号智能开闭匹配）
 9. 删除多余空行/段落
+
+### 批量处理
+
+```bash
+# 从文件列表批量处理
+python3 scripts/fix_docx_template.py \
+  --batch-file files.txt \
+  --template 模板文件.docx
+
+# 使用 JSON 配置文件
+python3 scripts/fix_docx_template.py \
+  --config config.json \
+  --template 模板文件.docx
+```
+
+`files.txt` 每行一个目标文件路径；`config.json` 可覆盖 CONFIG 中的参数（如字体、字号、缩进值等）。
 
 ### 阶段 4：最终验证
 
@@ -101,10 +119,11 @@ python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 |------|------|-------------|
 | `analyze_template.py` | **深度扫描**模板所有格式（显式+隐藏） | 否 |
 | `audit_docx.py` | 全面对比目标与模板差异 | 否 |
-| `fix_docx_template.py` | 精确修复脚本（含隐藏格式） | **是** |
+| `fix_docx_template.py` | 精确修复脚本（含隐藏格式） | **是**（CONFIG 和 classify_and_format） |
 | `verify_docx.py` | 多维度最终验证 | 否 |
 | `copy_styles.py` | 将模板样式复制到目标文件 | 否 |
 | `copy_headers_footers.py` | 将模板页眉页脚复制到目标文件 | 否 |
+| `utils.py` | 公共工具模块（EMU换算、字体设置、XML操作等） | 否 |
 
 ## EMU 换算速查
 
@@ -127,19 +146,26 @@ python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 ```
 ~/.claude/skills/docx-formatter/
 ├── SKILL.md
-├── README.md
-├── install.sh
 ├── .gitignore
 ├── examples/
 │   ├── template.docx          # 示例模板文件
-│   └── target.docx            # 示例目标文件（修复前）
-└── scripts/
-    ├── analyze_template.py    # 深度扫描模板
-    ├── audit_docx.py          # 全面对比差异
-    ├── fix_docx_template.py   # 精确修复脚本
-    ├── verify_docx.py         # 多维度验证
-    ├── copy_styles.py         # 复制样式定义
-    └── copy_headers_footers.py # 复制页眉页脚
+│   ├── target.docx            # 示例目标文件（修复前）
+│   ├── batch_config.json      # 批量处理配置示例
+│   └── README.md              # 示例使用说明
+├── scripts/
+│   ├── analyze_template.py    # 深度扫描模板
+│   ├── audit_docx.py          # 全面对比差异
+│   ├── fix_docx_template.py   # 精确修复脚本
+│   ├── verify_docx.py         # 多维度验证
+│   ├── copy_styles.py         # 复制样式定义
+│   ├── copy_headers_footers.py # 复制页眉页脚
+│   └── utils.py               # 公共工具模块
+└── tests/
+    ├── test_utils.py          # 工具函数测试
+    ├── test_fix_quotes.py     # 引号修复测试
+    ├── test_table_borders.py  # 表格边框测试
+    ├── test_integration.py    # 集成测试
+    └── run_tests.sh           # 测试运行脚本
 ```
 
 ## 进阶用法
@@ -173,10 +199,8 @@ python3 scripts/copy_styles.py 模板.docx 目标.docx
 # 4. 复制页眉页脚（如需同步）
 python3 scripts/copy_headers_footers.py 模板.docx 目标.docx
 
-# 5. 修复格式（只需编辑 CONFIG 中的文件名）
-cp scripts/fix_docx_template.py fix_target.py
-# 编辑 fix_target.py：修改 TARGET 和 TEMPLATE 文件名
-python3 fix_target.py
+# 5. 修复格式（支持命令行参数直接传入）
+python3 scripts/fix_docx_template.py 目标.docx --template 模板.docx
 # 脚本会自动：
 #   - 按段落内容分类并应用对应格式
 #   - 从模板自动同步表格边框、页面设置、目录域

@@ -5,7 +5,10 @@ docx-formatter 公共工具模块
 """
 import sys
 import os
+from copy import deepcopy
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.shared import Emu
 
 # ==================== XML 命名空间 ====================
 NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -84,7 +87,7 @@ def inch_to_emu(inch):
 def set_run_font(run, name='宋体', size=152400, bold=False, italic=False, underline=False, color=None):
     """设置 run 字体，包含东亚字体属性 w:eastAsia 和完整格式"""
     run.font.name = name
-    run.font.size = __import__('docx.shared', fromlist=['Emu']).Emu(size)
+    run.font.size = Emu(size)
     if bold is None:
         run.font.bold = None
     else:
@@ -160,7 +163,6 @@ def get_odd_even_headers(section):
 
 def set_odd_even_headers(section, enabled):
     """设置 section 的奇偶页不同页眉页脚"""
-    ox = __import__('docx.oxml', fromlist=['OxmlElement']).OxmlElement
     sectPr = section._sectPr
     existing = sectPr.find(ns_tag(W_EVENODD))
     if enabled:
@@ -179,24 +181,6 @@ def check_file_exists(filepath, label='文件'):
         sys.exit(1)
 
 
-def parse_args(defaults, min_args=1):
-    """
-    解析命令行参数，支持按位置传入。
-    defaults: 参数默认值列表，如 ['template.docx', 'target.docx']
-    min_args: 最少需要的参数数量
-    返回: (arg1, arg2, ...) 元组
-    """
-    args = []
-    for i, default in enumerate(defaults):
-        arg = sys.argv[i + 1] if len(sys.argv) > i + 1 else default
-        args.append(arg)
-    for i in range(min_args):
-        if args[i] == defaults[i] and not os.path.isfile(args[i]):
-            # 使用默认值但文件不存在
-            pass  # 由调用方处理
-    return tuple(args)
-
-
 # ==================== 表格边框 XML 操作 ====================
 def get_table_borders_xml(table):
     """提取表格的边框 XML 元素（深拷贝）"""
@@ -207,37 +191,35 @@ def get_table_borders_xml(table):
     borders = tblPr.find(ns_tag(W_TBLBORDERS))
     if borders is None:
         return None
-    return __import__('copy', fromlist=['deepcopy']).deepcopy(borders)
+    return deepcopy(borders)
 
 
 def apply_table_borders(table, borders_element):
     """将边框 XML 应用到表格"""
-    ox = __import__('docx.oxml', fromlist=['OxmlElement']).OxmlElement
     tbl = table._tbl
     tblPr = tbl.find(ns_tag(W_TBLPR))
     if tblPr is None:
-        tblPr = ox(W_TBLPR)
+        tblPr = OxmlElement(W_TBLPR)
         tbl.insert(0, tblPr)
 
     old_borders = tblPr.find(ns_tag(W_TBLBORDERS))
     if old_borders is not None:
         tblPr.remove(old_borders)
-    tblPr.append(__import__('copy', fromlist=['deepcopy']).deepcopy(borders_element))
+    tblPr.append(deepcopy(borders_element))
 
 
 # ==================== 表格默认边框 ====================
 def apply_default_table_borders(table):
     """给表格应用默认边框（单线，宽度 4 = 1/2 pt）"""
-    ox = __import__('docx.oxml', fromlist=['OxmlElement']).OxmlElement
     tbl = table._tbl
     tblPr = tbl.find(ns_tag(W_TBLPR))
     if tblPr is None:
-        tblPr = ox(W_TBLPR)
+        tblPr = OxmlElement(W_TBLPR)
         tbl.insert(0, tblPr)
 
     borders = tblPr.find(ns_tag(W_TBLBORDERS))
     if borders is None:
-        borders = ox(W_TBLBORDERS)
+        borders = OxmlElement(W_TBLBORDERS)
         tblPr.append(borders)
 
     # 清除旧边框设置
@@ -246,7 +228,7 @@ def apply_default_table_borders(table):
 
     # 添加新边框
     for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-        border = ox(f'w:{border_name}')
+        border = OxmlElement(f'w:{border_name}')
         border.set(ns_attr('val'), 'single')
         border.set(ns_attr('sz'), '4')
         border.set(ns_attr('space'), '0')
@@ -365,6 +347,32 @@ def run_with_errors(func):
             traceback.print_exc()
             sys.exit(1)
     return wrapper
+
+
+def compare_para_props(target_info, tmpl_info):
+    """对比目标段落与模板段落的属性差异，返回差异描述列表"""
+    issues = []
+    if target_info['font_name'] != tmpl_info['font_name'] and tmpl_info['font_name']:
+        issues.append(f"font={target_info['font_name']}(应{tmpl_info['font_name']})")
+    if target_info['font_size'] != tmpl_info['font_size'] and tmpl_info['font_size']:
+        issues.append(f"size={target_info['font_size']}(应{tmpl_info['font_size']})")
+    if target_info['alignment'] != tmpl_info['alignment']:
+        issues.append(f"align={target_info['alignment']}(应{tmpl_info['alignment']})")
+    if target_info['bold'] != tmpl_info['bold'] and tmpl_info['bold'] is not None:
+        issues.append(f"bold={target_info['bold']}(应{tmpl_info['bold']})")
+    if target_info['line_spacing'] != tmpl_info['line_spacing'] and tmpl_info['line_spacing'] is not None:
+        issues.append(f"ls={target_info['line_spacing']}(应{tmpl_info['line_spacing']})")
+    if target_info['line_spacing_rule'] != tmpl_info['line_spacing_rule']:
+        issues.append(f"ls_rule={target_info['line_spacing_rule']}(应{tmpl_info['line_spacing_rule']})")
+    if target_info['style'] != tmpl_info['style'] and tmpl_info['style']:
+        issues.append(f"style={target_info['style']}(应{tmpl_info['style']})")
+    if target_info['first_line_indent'] != tmpl_info['first_line_indent'] and tmpl_info['first_line_indent'] is not None:
+        issues.append(f"fi={target_info['first_line_indent']}(应{tmpl_info['first_line_indent']})")
+    if target_info['space_before'] != tmpl_info['space_before'] and tmpl_info['space_before'] is not None:
+        issues.append(f"sb={target_info['space_before']}(应{tmpl_info['space_before']})")
+    if target_info['space_after'] != tmpl_info['space_after'] and tmpl_info['space_after'] is not None:
+        issues.append(f"sa={target_info['space_after']}(应{tmpl_info['space_after']})")
+    return issues
 
 
 def check_write_permission(filepath, label='文件'):

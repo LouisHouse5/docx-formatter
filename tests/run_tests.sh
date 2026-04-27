@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 cd "$(dirname "$0")"
 echo "Running docx-formatter tests..."
 echo ""
@@ -13,5 +14,8 @@ python3 test_table_borders.py -v
 echo ""
 echo "=== test_integration.py ==="
 python3 test_integration.py -v
+echo ""
+echo "=== test_scripts_cli.py ==="
+python3 test_scripts_cli.py -v
 echo ""
 echo "All tests completed."

@@ -30,7 +30,7 @@ from utils import run_with_errors, check_write_permission, log_ok, log_warn, log
 parser = argparse.ArgumentParser(description='修复 docx 文件格式')
 parser.add_argument('target', nargs='?', help='目标 docx 文件路径（覆盖 CONFIG）')
 parser.add_argument('template', nargs='?', help='模板 docx 文件路径（覆盖 CONFIG）')
-parser.add_argument('--template-opt', '-t', dest='template_opt', help='模板 docx 文件路径（与位置参数等效，推荐批量处理时使用）')
+parser.add_argument('--template', '-t', dest='template_opt', help='模板 docx 文件路径（与位置参数等效，推荐批量处理时使用）')
 parser.add_argument('--batch-file', '-b', help='批量处理：从文本文件读取目标文件列表（每行一个路径）')
 parser.add_argument('--config', '-c', help='JSON 配置文件路径')
 args = parser.parse_args()
@@ -601,6 +601,7 @@ def _process_single_file(target_path, tmpl_path):
     print("-" * 60)
 
     doc = docx.Document(target_path)
+    check_write_permission(target_path, '目标文件')
 
     # 尝试加载模板（用于自动同步隐藏格式）
     tmpl_doc = None
@@ -646,7 +647,6 @@ def _process_single_file(target_path, tmpl_path):
     print("10. 删除表格空行...")
     remove_empty_table_rows(doc)
 
-    check_write_permission(target_path, '目标文件')
     doc.save(target_path)
     print("-" * 60)
     log_ok(f"修复完成！已保存: {target_path}")

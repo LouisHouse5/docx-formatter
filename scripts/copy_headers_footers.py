@@ -74,12 +74,12 @@ def copy_headers_footers(tmpl_doc, target_doc):
 def main():
     check_file_exists(TMPL, '模板文件')
     check_file_exists(TARGET, '目标文件')
+    check_write_permission(TARGET, '目标文件')
 
     tmpl = docx.Document(TMPL)
     doc = docx.Document(TARGET)
 
     copy_headers_footers(tmpl, doc)
-    check_write_permission(TARGET, '目标文件')
     doc.save(TARGET)
     log_ok(f"已保存: {TARGET}")
 

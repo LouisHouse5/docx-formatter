@@ -7,7 +7,7 @@ import docx
 import sys
 import argparse
 
-from utils import get_para_props, check_file_exists
+from utils import get_para_props, compare_para_props, check_file_exists
 from utils import run_with_errors, check_write_permission, log_ok, log_warn, log_err
 
 parser = argparse.ArgumentParser(description='多维度验证目标文件与模板的格式一致性')
@@ -44,27 +44,7 @@ def verify_paragraphs(tmpl_doc, target_doc):
         if not tmpl_info:
             continue
 
-        issues = []
-        if info['font_name'] != tmpl_info['font_name'] and tmpl_info['font_name']:
-            issues.append(f"font={info['font_name']}(应{tmpl_info['font_name']})")
-        if info['font_size'] != tmpl_info['font_size'] and tmpl_info['font_size']:
-            issues.append(f"size={info['font_size']}(应{tmpl_info['font_size']})")
-        if info['alignment'] != tmpl_info['alignment']:
-            issues.append(f"align={info['alignment']}(应{tmpl_info['alignment']})")
-        if info['bold'] != tmpl_info['bold'] and tmpl_info['bold'] is not None:
-            issues.append(f"bold={info['bold']}(应{tmpl_info['bold']})")
-        if info['line_spacing'] != tmpl_info['line_spacing'] and tmpl_info['line_spacing'] is not None:
-            issues.append(f"ls={info['line_spacing']}(应{tmpl_info['line_spacing']})")
-        if info['line_spacing_rule'] != tmpl_info['line_spacing_rule']:
-            issues.append(f"ls_rule={info['line_spacing_rule']}(应{tmpl_info['line_spacing_rule']})")
-        if info['style'] != tmpl_info['style'] and tmpl_info['style']:
-            issues.append(f"style={info['style']}(应{tmpl_info['style']})")
-        if info['first_line_indent'] != tmpl_info['first_line_indent'] and tmpl_info['first_line_indent'] is not None:
-            issues.append(f"fi={info['first_line_indent']}(应{tmpl_info['first_line_indent']})")
-        if info['space_before'] != tmpl_info['space_before'] and tmpl_info['space_before'] is not None:
-            issues.append(f"sb={info['space_before']}(应{tmpl_info['space_before']})")
-        if info['space_after'] != tmpl_info['space_after'] and tmpl_info['space_after'] is not None:
-            issues.append(f"sa={info['space_after']}(应{tmpl_info['space_after']})")
+        issues = compare_para_props(info, tmpl_info)
 
         if issues:
             diffs.append((i, info['text'], issues))

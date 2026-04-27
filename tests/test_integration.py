@@ -5,6 +5,7 @@ import os
 import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
+import shutil
 import unittest
 import docx
 from docx.shared import Emu, Pt
@@ -26,7 +27,6 @@ class TestIntegration(unittest.TestCase):
         self.target_path = os.path.join(self.tmpdir, 'target.docx')
 
     def tearDown(self):
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _create_template(self):
