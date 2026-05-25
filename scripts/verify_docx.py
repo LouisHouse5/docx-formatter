@@ -203,13 +203,14 @@ def verify_tables(tmpl_doc, target_doc):
     print("【表格验证】")
     print("=" * 90)
 
-    diffs = []
+    format_diffs = []
+    content_diffs = []
 
     tmpl_tables = len(tmpl_doc.tables)
     target_tables = len(target_doc.tables)
 
     if tmpl_tables != target_tables:
-        diffs.append(f"表格数量不一致: 目标={target_tables}, 模板={tmpl_tables}")
+        format_diffs.append(f"表格数量不一致: 目标={target_tables}, 模板={tmpl_tables}")
 
     min_tables = min(tmpl_tables, target_tables)
     for i in range(min_tables):
@@ -222,9 +223,9 @@ def verify_tables(tmpl_doc, target_doc):
         target_cols = len(target_t.columns)
 
         if tmpl_rows != target_rows:
-            diffs.append(f"Table {i+1} 行数不一致: 目标={target_rows}, 模板={tmpl_rows}")
+            format_diffs.append(f"Table {i+1} 行数不一致: 目标={target_rows}, 模板={tmpl_rows}")
         if tmpl_cols != target_cols:
-            diffs.append(f"Table {i+1} 列数不一致: 目标={target_cols}, 模板={tmpl_cols}")
+            format_diffs.append(f"Table {i+1} 列数不一致: 目标={target_cols}, 模板={tmpl_cols}")
 
         # 对比单元格内容
         min_rows = min(tmpl_rows, target_rows)
@@ -235,14 +236,17 @@ def verify_tables(tmpl_doc, target_doc):
                 tmpl_text = tmpl_t.rows[r].cells[c].text.strip()
                 target_text = target_t.rows[r].cells[c].text.strip()
                 if tmpl_text != target_text:
-                    diffs.append(f"Table {i+1}[{r},{c}] 内容不一致")
+                    content_diffs.append(f"Table {i+1}[{r},{c}] 内容不一致")
 
-    for issue in diffs[:30]:
+    all_diffs = format_diffs + content_diffs
+    for issue in all_diffs[:30]:
         print(f"  {issue}")
 
-    total = len(diffs)
-    print(f"\n表格验证: 共发现 {total} 处差异")
-    return total
+    if content_diffs and not format_diffs:
+        print(f"\n表格验证: 共发现 {len(format_diffs)} 处格式差异, {len(content_diffs)} 处内容差异（内容不同属正常）")
+    else:
+        print(f"\n表格验证: 共发现 {len(format_diffs)} 处格式差异, {len(content_diffs)} 处内容差异")
+    return len(format_diffs)
 
 # ============== 主程序 ==============
 @run_with_errors

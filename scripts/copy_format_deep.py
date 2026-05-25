@@ -31,20 +31,37 @@ def _deep_sync_pPr(src_para, dst_para):
         dst_para._element.remove(dst_pPr)
 
 
+def _apply_rPr(run, new_rPr):
+    """将 rPr 元素应用到 run"""
+    old_rPr = run._element.find(qn('w:rPr'))
+    if old_rPr is not None:
+        run._element.replace(old_rPr, new_rPr)
+    else:
+        run._element.insert(0, new_rPr)
+
+
 def _deep_sync_rPr(src_para, dst_para):
-    """深度同步 run 格式：逐 run 替换 rPr 元素"""
+    """深度同步 run 格式：逐 run 替换 rPr 元素，处理 run 数量不一致"""
     src_runs = src_para.runs
     dst_runs = dst_para.runs
 
+    if not src_runs or not dst_runs:
+        return
+
+    # 找到模板中文本最长的 run 作为 fallback 格式（最具代表性）
+    dominant_src = max(src_runs, key=lambda r: len(r.text) if r.text else 0)
+    dominant_rPr = dominant_src._element.find(qn('w:rPr'))
+
+    # 按 run 索引逐对拷贝 rPr
     for sr, dr in zip(src_runs, dst_runs):
         src_rPr = sr._element.find(qn('w:rPr'))
         if src_rPr is not None:
-            new_rPr = copy.deepcopy(src_rPr)
-            old_rPr = dr._element.find(qn('w:rPr'))
-            if old_rPr is not None:
-                dr._element.replace(old_rPr, new_rPr)
-            else:
-                dr._element.insert(0, new_rPr)
+            _apply_rPr(dr, copy.deepcopy(src_rPr))
+
+    # 目标 run 多于模板：用 dominant 格式覆盖剩余目标 run
+    if len(dst_runs) > len(src_runs) and dominant_rPr is not None:
+        for dr in dst_runs[len(src_runs):]:
+            _apply_rPr(dr, copy.deepcopy(dominant_rPr))
 
 
 def _copy_cell_format(src_cell, dst_cell):
