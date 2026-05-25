@@ -10,7 +10,7 @@
 - **东亚字体完整支持**：自动设置 `w:eastAsia` 属性，确保中文排版正确
 - **自动化验证**：修复后自动多维度验证，确保与模板完全一致
 
-## 安装
+## 前置依赖
 
 ```bash
 pip install python-docx
@@ -19,8 +19,6 @@ pip install python-docx
 ## 快速开始
 
 ```bash
-cd ~/.claude/skills/docx-formatter
-
 # 1. 分析模板格式
 python3 scripts/analyze_template.py examples/template.docx
 
@@ -48,6 +46,71 @@ python3 scripts/fix_docx_template.py \
   --template template.docx
 ```
 
+## 在 AI Agent 中安装
+
+### Claude Code
+
+```bash
+# 克隆到用户级 skills 目录（全局可用）
+git clone https://github.com/LouisHouse5/docx-formatter.git ~/.claude/skills/docx-formatter
+
+# 或克隆到项目级目录（仅当前项目可用）
+git clone https://github.com/LouisHouse5/docx-formatter.git .claude/skills/docx-formatter
+```
+
+### Cursor
+
+将 [SKILL.md](SKILL.md) 内容复制到项目规则文件：
+
+```bash
+mkdir -p .cursor/rules
+cp SKILL.md .cursor/rules/docx-formatter.mdc
+```
+
+### Cline (VS Code)
+
+```bash
+# 添加到项目根目录的自定义指令文件
+cat SKILL.md >> cline-instructions.md
+```
+
+### GitHub Copilot
+
+```bash
+mkdir -p .github
+cp SKILL.md .github/copilot-instructions.md
+```
+
+### Gemini CLI
+
+```bash
+# 用户级（全局可用）
+mkdir -p ~/.gemini
+cat SKILL.md >> ~/.gemini/GEMINI.md
+
+# 或项目级
+cat SKILL.md >> GEMINI.md
+```
+
+### OpenAI Codex CLI
+
+```bash
+# 用户级
+mkdir -p ~/.codex
+cat SKILL.md >> ~/.codex/AGENTS.md
+
+# 或项目级
+cat SKILL.md >> AGENTS.md
+```
+
+### Windsurf (Codeium)
+
+将 SKILL.md 内容添加到项目 `.windsurfrules` 文件：
+
+```bash
+cat SKILL.md >> .windsurfrules
+```
+
 ## 项目结构
 
 ```
@@ -71,8 +134,8 @@ docx-formatter/
 │   ├── test_table_borders.py    # 表格边框测试
 │   ├── test_integration.py      # 集成测试
 │   └── run_tests.sh             # 测试运行脚本
-├── SKILL.md                     # Claude Code Skill 文档
-└── README.md                    # 本文件
+├── SKILL.md                     # Skill 定义文件（Agent 指令）
+└── README.md
 ```
 
 ## 运行测试
