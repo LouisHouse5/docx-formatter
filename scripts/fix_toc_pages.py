@@ -9,7 +9,7 @@ import sys
 from docx import Document
 from docx.shared import Pt, Emu, Length
 from docx.enum.text import WD_LINE_SPACING
-from lxml import etree
+from utils import has_toc_field
 
 
 BASE_DIR = '/Users/chutianshu/Documents/school-work/办公文件/26 级移动互联课程标准'
@@ -280,6 +280,11 @@ def fix_file(filepath):
     print(f"\n处理: {os.path.basename(filepath)}")
 
     doc = Document(filepath)
+
+    # 检测是否已有 TOC 域（真正的 Word 目录）
+    if has_toc_field(doc):
+        print("  文档已包含 TOC 域，请在 Word 中右键目录 → '更新域' 刷新页码")
+        return True
 
     # 1. 估算页码
     print("  估算页码...")

@@ -71,9 +71,15 @@ python3 scripts/copy_headers_footers.py 模板.docx 目标.docx
 # 3. 深度格式拷贝（段落+表格+section 一体化）
 python3 scripts/copy_format_deep.py 模板.docx 目标.docx
 
-# 4. 验证
+# 4. （可选）将静态目录转为 TOC 域
+python3 scripts/convert_toc_to_field.py 目标.docx
+
+# 5. 验证
 python3 scripts/verify_docx.py 目标.docx 模板.docx
 ```
+
+> **执行顺序**：`convert_toc_to_field.py` 必须在 `copy_format_deep.py` 之后运行。
+> 如需重新格式化，应从备份重新开始。
 
 ### 方式 B：规则匹配模式（结构不同时使用）
 
@@ -108,6 +114,8 @@ python3 scripts/fix_docx_template.py \
 | 脚本 | 作用 | 是否需要修改 |
 |------|------|-------------|
 | `copy_format_deep.py` | **深度格式拷贝**（按索引 XML 级 deepcopy） | 否 |
+| `convert_toc_to_field.py` | **静态目录转 TOC 域**（支持 Word 自动更新页码） | 否 |
+| `fix_toc_pages.py` | 修复静态目录页码（`**` 占位符） | 否 |
 | `analyze_template.py` | **深度扫描**模板所有格式（显式+隐藏） | 否 |
 | `audit_docx.py` | 全面对比目标与模板差异 | 否 |
 | `fix_docx_template.py` | 规则匹配修复（含隐藏格式） | **是**（CONFIG 和 classify_and_format） |
@@ -130,7 +138,8 @@ python3 scripts/fix_docx_template.py \
 2. **bold=None vs False**：`None` 表示继承样式（模板常用），`False` 表示显式不加粗
 3. **样式优先级**：直接格式 > 样式定义 > 默认样式。修复时两者都要对齐
 4. **页眉页脚复制**：`copy_headers_footers.py` 会覆盖目标文件的所有页眉页脚，谨慎使用
-5. **目录域**：自动复制的 TOC 域需在 Word 中右键目录 → "更新域" 才能刷新页码
+5. **目录域**：`convert_toc_to_field.py` 将静态目录转为 TOC 域，转换后需在 Word 中右键目录 → "更新域" 刷新页码
+6. **TOC 转换执行顺序**：`convert_toc_to_field.py` 必须在 `copy_format_deep.py` 之后运行（深度拷贝会覆盖 outlineLevel）
 6. **section break 保护**：`remove_empty_paragraphs()` 已修复 pPr 嵌套 sectPr 的检测，不会再误删含分节符的空段落
 7. **封面标题检测**：`classify_and_format()` 的封面标题规则已支持非首行（如"附件6"开头的文档）
 
@@ -146,7 +155,9 @@ python3 scripts/fix_docx_template.py \
 │   ├── batch_config.json      # 批量处理配置示例
 │   └── README.md              # 示例使用说明
 ├── scripts/
-│   ├── copy_format_deep.py    # 深度格式拷贝（新增）
+│   ├── copy_format_deep.py    # 深度格式拷贝
+│   ├── convert_toc_to_field.py # 静态目录转 TOC 域（新增）
+│   ├── fix_toc_pages.py       # 静态目录页码修复
 │   ├── analyze_template.py    # 深度扫描模板
 │   ├── audit_docx.py          # 全面对比差异
 │   ├── fix_docx_template.py   # 规则匹配修复
@@ -183,3 +194,20 @@ python3 scripts/fix_docx_template.py \
   --config config.json \
   --template 模板文件.docx
 ```
+
+### 将静态目录转为 Word TOC 域
+
+将纯文字目录（标题 + `\t` + 页码）转换为真正的 Word TOC 域，支持自动更新页码和点击跳转。
+
+```bash
+# 检测模式（不修改，只报告）
+python3 scripts/convert_toc_to_field.py --check 目标文件.docx
+
+# 执行转换
+python3 scripts/convert_toc_to_field.py 目标文件.docx
+
+# 指定大纲级别范围（默认 0-1，对应 TOC \o "1-2"）
+python3 scripts/convert_toc_to_field.py --levels "0-2" 目标文件.docx
+```
+
+转换后在 Word 中右键目录 → "更新域" → "更新整个目录" 即可刷新。
