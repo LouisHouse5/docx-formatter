@@ -114,7 +114,7 @@ def classify_and_format(doc):
             continue
 
         # ---- 1. 封面标题 ----
-        if i == 0 and text.startswith('《') and text.endswith('》'):
+        if text.startswith('《') and text.endswith('》') and '课程标准' not in text and i < 20:
             p.alignment = None
             p.paragraph_format.line_spacing = LS_COVER
             p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
@@ -144,7 +144,7 @@ def classify_and_format(doc):
             format_para_runs(p, FONT_SONG, SIZE_COVER_TITLE, True)
 
         # ---- 4. 正文大标题 ----
-        elif '课程标准' in text and text.startswith('《') and i > 10:
+        elif '课程标准' in text and text.startswith('《') and '\t' not in text and len(text) > 10:
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p.paragraph_format.line_spacing = None
             p.paragraph_format.line_spacing_rule = None
@@ -448,7 +448,13 @@ def remove_empty_paragraphs(doc):
     for p in list(doc.paragraphs):
         if not p.text.strip():
             # 保留有表格、分节符或图片的段落
+            # 注意：sectPr 可能嵌套在 pPr 内部（w:p > w:pPr > w:sectPr），不是直接子元素
             has_content = any(child.tag.endswith(('tbl', 'sectPr')) for child in p._element)
+            if not has_content:
+                # 检查 pPr 内是否有 sectPr（常见的分节符位置）
+                pPr = p._element.find(ns_tag('w:pPr'))
+                if pPr is not None and pPr.find(ns_tag('w:sectPr')) is not None:
+                    has_content = True
             if not has_content:
                 # 检查 run 中是否有图片
                 for r in p._element.findall(ns_tag('w:r')):

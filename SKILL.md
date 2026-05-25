@@ -16,6 +16,31 @@ trigger: /docx-format
 pip install python-docx
 ```
 
+## 两种工作模式
+
+| 模式 | 脚本 | 适用场景 | 原理 |
+|------|------|---------|------|
+| **深度拷贝** | `copy_format_deep.py` | 两份文档**结构一致**（相同段落数/表格数/section数） | 按索引逐段落 XML 级 deepcopy |
+| **规则匹配** | `fix_docx_template.py` | 两份文档**结构不同**或批量处理 | 基于内容规则匹配段落类型 |
+
+### 如何选择模式
+
+```
+两份文档结构是否一致？
+├── 是 → copy_format_deep.py（推荐，零规则偏差）
+└── 否 → fix_docx_template.py（需要调整 CONFIG 和 classify_and_format 规则）
+```
+
+**深度拷贝模式的优势**：
+- 无需编写/调整内容匹配规则
+- 直接复制模板的格式定义（pPr/rPr），保证 100% 对齐
+- 通过 verify_docx.py 验证可达 0 段落差异
+
+**规则匹配模式的优势**：
+- 支持结构不同的文档（段落数不一致）
+- 支持 `--batch-file` 批量处理
+- 可通过 CONFIG 和 JSON 配置灵活调整
+
 ## 覆盖的格式维度
 
 | 维度 | 显式格式 | 隐藏格式 |
@@ -31,95 +56,61 @@ pip install python-docx
 
 ## 工作流程
 
-### 阶段 1：深度扫描模板
+### 方式 A：深度拷贝模式（结构一致时推荐）
 
 ```bash
+# 0. 备份
+cp 目标.docx 目标_backup.docx
+
+# 1. 复制样式定义
+python3 scripts/copy_styles.py 模板.docx 目标.docx
+
+# 2. 复制页眉页脚
+python3 scripts/copy_headers_footers.py 模板.docx 目标.docx
+
+# 3. 深度格式拷贝（段落+表格+section 一体化）
+python3 scripts/copy_format_deep.py 模板.docx 目标.docx
+
+# 4. 验证
+python3 scripts/verify_docx.py 目标.docx 模板.docx
+```
+
+### 方式 B：规则匹配模式（结构不同时使用）
+
+```bash
+# 1. 深度扫描模板
 python3 scripts/analyze_template.py 模板文件.docx > template_report.txt
-```
 
-输出包含：
-- 每种段落类型的精确格式参数
-- **每个 Section** 的页面设置（纸张、页边距、方向）
-- **每个页眉/页脚** 的内容和格式
-- **所有样式定义**（Normal、Heading1、TOC1 等）
-- **每个表格** 的边框、列宽、单元格对齐
-- **目录域代码** 分析
-
-### 阶段 2：全面审核目标文件
-
-```bash
+# 2. 全面审核目标文件
 python3 scripts/audit_docx.py 目标文件.docx 模板文件.docx
-```
 
-输出：
-- 段落格式差异（逐行对比）
-- 页面/分节差异
-- 页眉页脚差异
-- 样式缺失/不一致
-- 表格结构差异
-- 目录格式差异
+# 3. 复制样式 + 页眉页脚
+python3 scripts/copy_styles.py 模板.docx 目标.docx
+python3 scripts/copy_headers_footers.py 模板.docx 目标.docx
 
-### 阶段 3：精确修复
-
-```bash
-# 单文件修复
-python3 scripts/fix_docx_template.py 目标文件.docx 模板文件.docx
-
-# 或指定模板路径（推荐）
+# 4. 精确修复
 python3 scripts/fix_docx_template.py 目标文件.docx --template 模板文件.docx
-```
 
-修复内容包括：
-1. 所有段落的字体统一（含东亚字体 `w:eastAsia`）
-2. 段落格式匹配（对齐、行距、段前段后、首行缩进、样式应用）
-3. **页面设置按分节自动同步**（纸张、页边距、方向、页眉页脚距边界 —— 自动从模板读取）
-4. **页眉页脚**内容同步（可选：复制模板页眉页脚）
-5. **样式定义**同步（复制模板样式到目标文件）
-6. **表格格式自动同步**（边框从模板逐表复制、字体、对齐）
-7. **目录域自动同步**（从模板复制 TOC 域代码，目标已有则跳过）
-8. 半角引号转全角（含单双引号智能开闭匹配）
-9. 删除多余空行/段落
-
-### 批量处理
-
-```bash
-# 从文件列表批量处理
-python3 scripts/fix_docx_template.py \
-  --batch-file files.txt \
-  --template 模板文件.docx
-
-# 使用 JSON 配置文件
-python3 scripts/fix_docx_template.py \
-  --config config.json \
-  --template 模板文件.docx
-```
-
-`files.txt` 每行一个目标文件路径；`config.json` 可覆盖 CONFIG 中的参数（如字体、字号、缩进值等）。
-
-### 阶段 4：最终验证
-
-```bash
+# 5. 最终验证
 python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 ```
 
-理想输出：
-```
-[段落验证] 共发现 0 处差异
-[分节验证] 共发现 0 处差异
-[页眉页脚验证] 共发现 0 处差异
-[样式验证] 共发现 0 处差异
-[表格验证] 共发现 0 处差异
-========================================
-全部验证通过！目标文件与模板格式完全一致。
+### 批量处理（仅规则匹配模式）
+
+```bash
+python3 scripts/fix_docx_template.py \
+  --batch-file files.txt \
+  --template 模板文件.docx
 ```
 
 ## 关键脚本说明
 
 | 脚本 | 作用 | 是否需要修改 |
 |------|------|-------------|
+| `copy_format_deep.py` | **深度格式拷贝**（按索引 XML 级 deepcopy） | 否 |
 | `analyze_template.py` | **深度扫描**模板所有格式（显式+隐藏） | 否 |
 | `audit_docx.py` | 全面对比目标与模板差异 | 否 |
-| `fix_docx_template.py` | 精确修复脚本（含隐藏格式） | **是**（CONFIG 和 classify_and_format） |
+| `fix_docx_template.py` | 规则匹配修复（含隐藏格式） | **是**（CONFIG 和 classify_and_format） |
 | `verify_docx.py` | 多维度最终验证 | 否 |
 | `copy_styles.py` | 将模板样式复制到目标文件 | 否 |
 | `copy_headers_footers.py` | 将模板页眉页脚复制到目标文件 | 否 |
@@ -140,6 +131,8 @@ python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 3. **样式优先级**：直接格式 > 样式定义 > 默认样式。修复时两者都要对齐
 4. **页眉页脚复制**：`copy_headers_footers.py` 会覆盖目标文件的所有页眉页脚，谨慎使用
 5. **目录域**：自动复制的 TOC 域需在 Word 中右键目录 → "更新域" 才能刷新页码
+6. **section break 保护**：`remove_empty_paragraphs()` 已修复 pPr 嵌套 sectPr 的检测，不会再误删含分节符的空段落
+7. **封面标题检测**：`classify_and_format()` 的封面标题规则已支持非首行（如"附件6"开头的文档）
 
 ## 文件结构
 
@@ -153,9 +146,10 @@ python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 │   ├── batch_config.json      # 批量处理配置示例
 │   └── README.md              # 示例使用说明
 ├── scripts/
+│   ├── copy_format_deep.py    # 深度格式拷贝（新增）
 │   ├── analyze_template.py    # 深度扫描模板
 │   ├── audit_docx.py          # 全面对比差异
-│   ├── fix_docx_template.py   # 精确修复脚本
+│   ├── fix_docx_template.py   # 规则匹配修复
 │   ├── verify_docx.py         # 多维度验证
 │   ├── copy_styles.py         # 复制样式定义
 │   ├── copy_headers_footers.py # 复制页眉页脚
@@ -172,8 +166,6 @@ python3 scripts/verify_docx.py 目标文件.docx 模板文件.docx
 
 ### 复制模板样式到目标文件
 
-如果目标文件缺少模板中的自定义样式（如 `toc 1`、`toc 2`、`Heading1` 等）：
-
 ```bash
 python3 scripts/copy_styles.py 模板文件.docx 目标文件.docx
 ```
@@ -184,28 +176,10 @@ python3 scripts/copy_styles.py 模板文件.docx 目标文件.docx
 python3 scripts/copy_headers_footers.py 模板文件.docx 目标文件.docx
 ```
 
-### 完整流程示例
+### 使用 JSON 配置文件
 
 ```bash
-# 1. 分析模板（一次性，了解模板格式参数）
-python3 scripts/analyze_template.py 模板.docx > template_report.txt
-
-# 2. 审核目标文件
-python3 scripts/audit_docx.py 目标.docx 模板.docx
-
-# 3. 复制样式（如目标文件缺少模板样式）
-python3 scripts/copy_styles.py 模板.docx 目标.docx
-
-# 4. 复制页眉页脚（如需同步）
-python3 scripts/copy_headers_footers.py 模板.docx 目标.docx
-
-# 5. 修复格式（支持命令行参数直接传入）
-python3 scripts/fix_docx_template.py 目标.docx --template 模板.docx
-# 脚本会自动：
-#   - 按段落内容分类并应用对应格式
-#   - 从模板自动同步表格边框、页面设置、目录域
-#   - 修复引号、删除空行
-
-# 6. 最终验证
-python3 scripts/verify_docx.py 目标.docx 模板.docx
+python3 scripts/fix_docx_template.py \
+  --config config.json \
+  --template 模板文件.docx
 ```
