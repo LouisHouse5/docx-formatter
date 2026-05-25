@@ -147,6 +147,48 @@ docx-formatter/
 └── README.md
 ```
 
+## Agent 使用示例
+
+在 Claude Code / Cursor / Copilot 等 AI Agent 中，直接用自然语言描述格式修复需求：
+
+**示例 1 — 单文件格式修复**
+```
+> 把 report.docx 的格式修复成和 template.docx 一样
+
+Agent 会运行：
+  python3 scripts/fix_docx_template.py report.docx --template template.docx
+  → 段落、表格、页眉页脚、样式全部对齐模板
+```
+
+**示例 2 — 先审核再修复**
+```
+> 先对比 draft.docx 和 template.docx 的格式差异，确认后再修复
+
+Agent 会分步执行：
+  1. python3 scripts/audit_docx.py draft.docx template.docx  → 输出差异报告
+  2. 用户确认后：python3 scripts/fix_docx_template.py draft.docx --template template.docx
+```
+
+**示例 3 — 批量处理 + 验证**
+```
+> 把 ./docs 目录里所有 docx 文件批量修复格式，用 template.docx 做模板，修完自动验证
+
+Agent 会生成批量处理脚本：
+  1. 遍历目录收集所有 .docx 文件
+  2. 逐个调用 fix_docx_template.py 修复
+  3. 逐个调用 verify_docx.py 验证结果
+  4. 输出修复报告（成功/失败/跳过）
+```
+
+**示例 4 — 分析模板格式**
+```
+> 帮我分析一下 template.docx 里用了哪些格式设置，我要了解模板的详细规格
+
+Agent 会运行：
+  python3 scripts/analyze_template.py template.docx
+  → 输出字体、字号、行距、页面边距、表格样式等完整格式规格
+```
+
 ## 运行测试
 
 ```bash
@@ -304,6 +346,48 @@ docx-formatter/
 ```bash
 cd tests
 ./run_tests.sh
+```
+
+## Agent Usage Examples
+
+In AI agents like Claude Code / Cursor / Copilot, describe your formatting fix in natural language:
+
+**Example 1 — Single File Format Fix**
+```
+> Fix the formatting in report.docx to match template.docx
+
+Agent runs:
+  python3 scripts/fix_docx_template.py report.docx --template template.docx
+  → Paragraphs, tables, headers/footers, styles all aligned to template
+```
+
+**Example 2 — Audit Before Fixing**
+```
+> First compare draft.docx against template.docx formatting, then fix after I confirm
+
+Agent executes in two steps:
+  1. python3 scripts/audit_docx.py draft.docx template.docx  → outputs diff report
+  2. After user confirms: python3 scripts/fix_docx_template.py draft.docx --template template.docx
+```
+
+**Example 3 — Batch Process + Verify**
+```
+> Batch-fix all docx files in ./docs using template.docx, then auto-verify each one
+
+Agent generates a batch processing script:
+  1. Scan directory for all .docx files
+  2. Run fix_docx_template.py on each
+  3. Run verify_docx.py on each result
+  4. Output summary (success/fail/skipped)
+```
+
+**Example 4 — Analyze Template Formatting**
+```
+> Analyze template.docx and show me all the formatting settings used
+
+Agent runs:
+  python3 scripts/analyze_template.py template.docx
+  → Outputs fonts, sizes, line spacing, margins, table styles, and more
 ```
 
 ## Full Documentation
