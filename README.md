@@ -1,5 +1,8 @@
 # docx-formatter
 
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)
+![python-docx](https://img.shields.io/badge/library-python--docx-4B8BBE?labelColor=2a2a2a)
+
 [中文](#中文) | [English](#english)
 
 ---
